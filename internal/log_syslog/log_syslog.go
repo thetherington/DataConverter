@@ -33,6 +33,7 @@ type LogSyslog struct {
 	num_errors int
 	Index      string
 	Templates  map[string]string
+	Count      chan int
 }
 
 func New(index string) *LogSyslog {
@@ -40,6 +41,7 @@ func New(index string) *LogSyslog {
 		num_errors: 0,
 		Index:      index,
 		Templates:  templates,
+		Count:      make(chan int),
 	}
 }
 
@@ -49,6 +51,14 @@ func (sys *LogSyslog) IncrementErrors() {
 
 func (sys *LogSyslog) ReturnErrors() int {
 	return sys.num_errors
+}
+
+func (sys *LogSyslog) SendToCountChan(v int) {
+	sys.Count <- v
+}
+
+func (sys *LogSyslog) GetCountChan() chan int {
+	return sys.Count
 }
 
 func (sys *LogSyslog) GetTemplate(name string) string {

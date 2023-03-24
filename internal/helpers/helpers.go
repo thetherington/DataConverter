@@ -2,14 +2,12 @@ package helpers
 
 import (
 	"archive/tar"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,6 +21,7 @@ type Converter interface {
 	IncrementErrors()
 	GetTemplate(tmpl string) string
 	GetIndexName() string
+	SendToCountChan(v int)
 }
 
 func ValidateArchiveGetIndexName(f string) (string, error) {
@@ -42,106 +41,6 @@ func ValidateArchiveGetIndexName(f string) (string, error) {
 	}
 
 	return "", errors.New("couldn't get index name from archive file")
-}
-
-func CreateWorkingDirExtract(f, dir string) error {
-	err := os.MkdirAll(filepath.Join(dir, "v11"), 0755)
-	if err != nil {
-		return errors.New("failed to create working directory")
-	}
-
-	err = os.MkdirAll(filepath.Join(dir, "v10.3"), 0755)
-	if err != nil {
-		return errors.New("failed to create working directory")
-	}
-
-	r, err := os.Open(f)
-	if err != nil {
-		return errors.New("archive file provided does not exist")
-	}
-
-	err = Untar(filepath.Join(dir, "v10.3"), r)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func ArchiveCleanup(index string) error {
-	w, err := os.Create(filepath.Join(index, fmt.Sprintf("%s.tar.gz", index)))
-	if err != nil {
-		return err
-	}
-
-	err = Tar(filepath.Join(index, "v11"), w)
-	if err != nil {
-		return err
-	}
-
-	err = os.RemoveAll(filepath.Join(index, "v11"))
-	if err != nil {
-		return err
-	}
-
-	err = os.RemoveAll(filepath.Join(index, "v10.3"))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func CreateTemplates(path string, c Converter) {
-	for _, tmpl := range []string{"alias", "mapping", "settings"} {
-		filename := fmt.Sprintf("%s-%s.json", c.GetIndexName(), tmpl)
-
-		w, err := os.OpenFile(filepath.Join(path, filename), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatal(err)
-			return
-		}
-		defer w.Close()
-
-		f := c.GetTemplate(tmpl)
-
-		w.WriteString(f)
-	}
-}
-
-func ScanAndConvert(src, dst string, c Converter) {
-	f, err := os.Open(src)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	defer f.Close()
-
-	w, err := os.OpenFile(dst, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	defer w.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		j, err := c.Convert(scanner.Text())
-		if err != nil {
-			c.IncrementErrors()
-			continue
-		}
-
-		_, err = w.WriteString(j)
-		if err != nil {
-			c.IncrementErrors()
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-		return
-	}
 }
 
 func ReadJSON(data string, dst any) error {
