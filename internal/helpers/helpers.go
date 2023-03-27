@@ -16,14 +16,6 @@ import (
 	"github.com/chelnak/ysmrr"
 )
 
-type Converter interface {
-	Convert(i string) (string, error)
-	IncrementErrors()
-	GetTemplate(tmpl string) string
-	GetIndexName() string
-	SendToCountChan(v int)
-}
-
 func ValidateArchiveGetIndexName(f string) (string, error) {
 	// Check if the input file exists
 	r, err := os.Open(f)

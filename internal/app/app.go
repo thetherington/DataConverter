@@ -13,7 +13,6 @@ import (
 )
 
 type App struct {
-	index     string
 	converter ConverterInterface
 }
 
@@ -21,15 +20,15 @@ type ConverterInterface interface {
 	Convert(doc string) (string, error)
 	IncrementErrors()
 	GetTemplate(name string) string
-	GetIndexName() string
+	GetSourceIndexName() string
+	GetDestinationIndexName() string
 	SendToCountChan(count int)
 	GetCountChan() chan int
 	ReturnErrors() int
 }
 
-func New(c ConverterInterface, i string) *App {
+func New(c ConverterInterface) *App {
 	return &App{
-		index:     i,
 		converter: c,
 	}
 }
@@ -40,7 +39,10 @@ func (app *App) Run(arg string) error {
 	// start the spinners
 	sm.Start()
 
-	err := app.CreateWorkingDirExtract(arg, app.index)
+	srcIndex := app.converter.GetSourceIndexName()
+	dstIndex := app.converter.GetDestinationIndexName()
+
+	err := app.CreateWorkingDirExtract(arg, dstIndex)
 	if err != nil {
 		spinners["setup"].Error()
 		sm.Stop()
@@ -50,7 +52,7 @@ func (app *App) Run(arg string) error {
 	spinners["setup"].UpdateMessage("Setup/Extraction...Complete")
 	spinners["setup"].Complete()
 
-	app.CreateTemplates(filepath.Join(app.index, "v11"))
+	app.CreateTemplates(filepath.Join(dstIndex, "v11"))
 
 	done := make(chan bool)
 
@@ -72,8 +74,8 @@ func (app *App) Run(arg string) error {
 	}(spinners["upgrade"], app.converter.GetCountChan(), done)
 
 	app.ScanAndConvert(
-		filepath.Join(app.index, "v10.3", fmt.Sprintf("%s-data.json", app.index)),
-		filepath.Join(app.index, "v11", fmt.Sprintf("%s-data.json", app.index)),
+		filepath.Join(dstIndex, "v10.3", fmt.Sprintf("%s-data.json", srcIndex)),
+		filepath.Join(dstIndex, "v11", fmt.Sprintf("%s-data.json", dstIndex)),
 	)
 
 	done <- true
@@ -87,7 +89,7 @@ func (app *App) Run(arg string) error {
 
 	spinners["upgrade"].Complete()
 
-	err = app.ArchiveCleanup(app.index)
+	err = app.ArchiveCleanup(dstIndex)
 	if err != nil {
 		spinners["cleanup"].Error()
 		sm.Stop()
@@ -100,12 +102,12 @@ func (app *App) Run(arg string) error {
 	sm.Stop()
 
 	fmt.Println()
-	fmt.Println("New Archive: ", filepath.Join(app.index, fmt.Sprintf("%s.tar.gz", app.index)))
+	fmt.Println("New Archive: ", filepath.Join(dstIndex, fmt.Sprintf("%s.tar.gz", dstIndex)))
 
 	return nil
 }
 
-func (a *App) CreateWorkingDirExtract(f, dir string) error {
+func (app *App) CreateWorkingDirExtract(f, dir string) error {
 	err := os.MkdirAll(filepath.Join(dir, "v11"), 0755)
 	if err != nil {
 		return errors.New("failed to create working directory")
@@ -129,7 +131,7 @@ func (a *App) CreateWorkingDirExtract(f, dir string) error {
 	return nil
 }
 
-func (a *App) ArchiveCleanup(index string) error {
+func (app *App) ArchiveCleanup(index string) error {
 	w, err := os.Create(filepath.Join(index, fmt.Sprintf("%s.tar.gz", index)))
 	if err != nil {
 		return err
@@ -153,9 +155,9 @@ func (a *App) ArchiveCleanup(index string) error {
 	return nil
 }
 
-func (a *App) CreateTemplates(path string) {
+func (app *App) CreateTemplates(path string) {
 	for _, tmpl := range []string{"alias", "mapping", "settings"} {
-		filename := fmt.Sprintf("%s-%s.json", a.converter.GetIndexName(), tmpl)
+		filename := fmt.Sprintf("%s-%s.json", app.converter.GetDestinationIndexName(), tmpl)
 
 		w, err := os.OpenFile(filepath.Join(path, filename), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -164,13 +166,13 @@ func (a *App) CreateTemplates(path string) {
 		}
 		defer w.Close()
 
-		f := a.converter.GetTemplate(tmpl)
+		f := app.converter.GetTemplate(tmpl)
 
 		w.WriteString(f)
 	}
 }
 
-func (a *App) ScanAndConvert(src, dst string) {
+func (app *App) ScanAndConvert(src, dst string) {
 	f, err := os.Open(src)
 	if err != nil {
 		log.Fatal(err)
@@ -189,19 +191,19 @@ func (a *App) ScanAndConvert(src, dst string) {
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		j, err := a.converter.Convert(scanner.Text())
+		j, err := app.converter.Convert(scanner.Text())
 		if err != nil {
-			a.converter.IncrementErrors()
+			app.converter.IncrementErrors()
 			continue
 		}
 
 		_, err = w.WriteString(j)
 		if err != nil {
-			a.converter.IncrementErrors()
+			app.converter.IncrementErrors()
 		}
 
 		count++
-		a.converter.SendToCountChan(count)
+		app.converter.SendToCountChan(count)
 	}
 
 	if err := scanner.Err(); err != nil {
