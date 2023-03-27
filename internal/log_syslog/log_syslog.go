@@ -72,7 +72,11 @@ func (sys *LogSyslog) GetTemplate(name string) string {
 	return tmpl
 }
 
-func (sys *LogSyslog) GetIndexName() string {
+func (sys *LogSyslog) GetSourceIndexName() string {
+	return sys.Index
+}
+
+func (sys *LogSyslog) GetDestinationIndexName() string {
 	return sys.Index
 }
 
