@@ -51,5 +51,5 @@ func init() {
 	// when this action is called directly.
 	rootCmd.Flags().BoolVarP(&docGenerate, "docs", "g", false, "Generate documentation")
 
-	rootCmd.Version = "0.1"
+	rootCmd.Version = "0.2"
 }
